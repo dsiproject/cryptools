@@ -1,0 +1,13 @@
+<!DOCTYPE suite SYSTEM "http://testng.org/testng-1.0.dtd" >
+<suite name="unit" verbose="1">
+  <test name="field">
+    <groups>
+      <run>
+        <include name="unit"/>
+      </run>
+    </groups>
+    <packages>
+      <package name="net.metricspace.crypto.math.field"/>
+    </packages>
+  </test>
+</suite>
