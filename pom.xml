@@ -1,0 +1,370 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>net.metricspace</groupId>
+  <packaging>jar</packaging>
+  <version>1.0.0</version>
+  <artifactId>cryptools</artifactId>
+  <name>CrypTools</name>
+  <description>Useful cryptographic abstractions</description>
+
+  <developers>
+    <developer>
+      <id>eric.mccorkle</id>
+      <name>Eric L. McCorkle</name>
+      <email>eric@metricspace.net</email>
+    </developer>
+  </developers>
+
+  <properties>
+    <jcov.jar>${basedir}/lib/jcov.jar</jcov.jar>
+    <jcov_file_saver.jar>${basedir}/lib/jcov_file_saver.jar</jcov_file_saver.jar>
+    <slf4j.version>1.7.21</slf4j.version>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <java.version>1.8</java.version>
+    <test.unit.srcs>${project.basedir}/src/test/unit/java</test.unit.srcs>
+    <project.build.instr.outputDirectory>${project.build.directory}/instr-classes</project.build.instr.outputDirectory>
+    <jcov.template.xml>${project.build.directory}/template.xml</jcov.template.xml>
+    <jcov.unit.result.xml>${project.build.directory}/unit-result.xml</jcov.unit.result.xml>
+    <jcov.unit.coverage.xml>${project.build.directory}/unit-coverage.xml</jcov.unit.coverage.xml>
+    <test.unit.dir>src/test/unit</test.unit.dir>
+    <test.unit.srcs>${test.unit.dir}/java</test.unit.srcs>
+    <test.unit.resources>${test.unit.dir}/resources</test.unit.resources>
+    <test.unit.testng.xml>${test.unit.resources}/testng.xml</test.unit.testng.xml>
+    <target.dir>target</target.dir>
+    <test.unit.classes>${target}/unit-test-classes</test.unit.classes>
+    <test.perf.srcs>src/test/perf/java</test.perf.srcs>
+    <test.stress.dir>src/test/stress</test.stress.dir>
+    <test.stress.srcs>${test.stress.dir}/java</test.stress.srcs>
+    <test.stress.resources>${test.stress.dir}/resources</test.stress.resources>
+    <test.stress.testng.xml>${test.stress.resources}/testng.xml</test.stress.testng.xml>
+    <jcov.stress.result.xml>${project.build.directory}/stress-result.xml</jcov.stress.result.xml>
+    <jcov.stress.coverage.xml>${project.build.directory}/stress-coverage.xml</jcov.stress.coverage.xml>
+    <jcov.report.dir>${target.dir}/coverage</jcov.report.dir>
+    <benchmarks.name>benchmarks</benchmarks.name>
+    <benchmarks.jar>${target.dir}/${benchmarks.name}.jar</benchmarks.jar>
+    <jmh.version>1.19</jmh.version>
+    <testng.version>6.1.1</testng.version>
+    <perf.classes.dir>${project.build.directory}/perf-classes</perf.classes.dir>
+    <assembly.dir>src/assembly</assembly.dir>
+    <assembly.perf>${assembly.dir}/perf-tests.xml</assembly.perf>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.testng</groupId>
+      <artifactId>testng</artifactId>
+      <version>${testng.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.openjdk.jmh</groupId>
+      <artifactId>jmh-core</artifactId>
+      <version>${jmh.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.openjdk.jmh</groupId>
+      <artifactId>jmh-generator-annprocess</artifactId>
+      <version>${jmh.version}</version>
+      <scope>provided</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <testSourceDirectory>${test.unit.srcs}</testSourceDirectory>
+    <plugins>
+      <!-- Java compiler configuration -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.6.0</version>
+        <configuration>
+          <compilerVersion>${java.version}</compilerVersion>
+          <source>${java.version}</source>
+          <target>${java.version}</target>
+        </configuration>
+      </plugin>
+
+      <!-- Javadoc configuration -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <version>2.10.4</version>
+        <configuration>
+          <show>private</show>
+        </configuration>
+      </plugin>
+
+      <!-- Add stress test sources -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <version>1.9.1</version>
+        <executions>
+          <execution>
+            <id>add-test-source</id>
+            <phase>generate-test-sources</phase>
+            <goals>
+              <goal>add-test-source</goal>
+            </goals>
+            <configuration>
+              <sources>
+                <source>${test.stress.srcs}</source>
+                <source>${test.perf.srcs}</source>
+              </sources>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- Ordinary tests just run the unit test suite. -->
+      <plugin>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>2.14</version>
+        <configuration>
+          <suiteXmlFiles>
+            <suiteXmlFile>${test.unit.testng.xml}</suiteXmlFile>
+          </suiteXmlFiles>
+          <trimStackTrace>false</trimStackTrace>
+          <!-- Use the jcov instrumented class file directory -->
+          <classesDirectory>${project.build.instr.outputDirectory}</classesDirectory>
+          <!-- Add jcov_file_saver.jar to classpath -->
+          <additionalClasspathElements>
+            <additionalClasspathElement>${jcov_file_saver.jar}</additionalClasspathElement>
+          </additionalClasspathElements>
+          <!-- System properties needed by jcov -->
+          <systemPropertyVariables>
+            <jcov.template>${jcov.template.xml}</jcov.template>
+            <jcov.file>${jcov.unit.result.xml}</jcov.file>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
+
+      <!-- Integration are configured to generate coverage reports -->
+      <plugin>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <version>2.12</version>
+        <configuration>
+          <suiteXmlFiles>
+            <suiteXmlFile>${test.stress.testng.xml}</suiteXmlFile>
+          </suiteXmlFiles>
+          <!-- Use the jcov instrumented class file directory -->
+          <classesDirectory>${project.build.instr.outputDirectory}</classesDirectory>
+          <!-- Add jcov_file_saver.jar to classpath -->
+          <additionalClasspathElements>
+            <additionalClasspathElement>${jcov_file_saver.jar}</additionalClasspathElement>
+          </additionalClasspathElements>
+          <!-- System properties needed by jcov -->
+          <systemPropertyVariables>
+            <jcov.template>${jcov.template.xml}</jcov.template>
+            <jcov.file>${jcov.stress.result.xml}</jcov.file>
+          </systemPropertyVariables>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <artifactId>maven-resources-plugin</artifactId>
+        <version>3.0.2</version>
+        <executions>
+          <execution>
+            <id>copy-classes</id>
+            <phase>process-classes</phase>
+            <goals>
+              <goal>copy-resources</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${perf.classes.dir}</outputDirectory>
+              <resources>
+                <resource>
+                  <directory>${project.build.outputDirectory}</directory>
+                  <filtering>false</filtering>
+                </resource>
+              </resources>
+            </configuration>
+          </execution>
+
+          <execution>
+            <id>copy-test-classes</id>
+            <phase>process-test-classes</phase>
+            <goals>
+              <goal>copy-resources</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${perf.classes.dir}</outputDirectory>
+              <resources>
+                <resource>
+                  <directory>${project.build.testOutputDirectory}</directory>
+                  <includes>
+                    <include>**/perf/*.class</include>
+                    <include>**/perf/generated/*.class</include>
+                    <include>META-INF/*</include>
+                  </includes>
+                  <filtering>false</filtering>
+                </resource>
+              </resources>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>copy-dependencies</id>
+            <phase>prepare-package</phase>
+            <goals>
+              <goal>unpack-dependencies</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${perf.classes.dir}</outputDirectory>
+              <includeArtifactIds>jmh-core,jopt-simple,commons-math3</includeArtifactIds>
+              <overWriteReleases>false</overWriteReleases>
+              <overWriteSnapshots>false</overWriteSnapshots>
+              <overWriteIfNewer>true</overWriteIfNewer>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <artifactId>maven-jar-plugin</artifactId>
+        <version>3.0.2</version>
+        <configuration>
+          <addClasspath>true</addClasspath>
+          <classesDirectory>${perf.classes.dir}</classesDirectory>
+          <classpathPrefix>/lib/</classpathPrefix>
+          <classifier>benchmarks</classifier>
+          <archive>
+            <manifest>
+              <mainClass>org.openjdk.jmh.Main</mainClass>
+            </manifest>
+          </archive>
+        </configuration>
+      </plugin>
+
+      <!-- Raw execution -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>1.6.0</version>
+        <executions>
+          <!-- Instrument the build classes -->
+          <execution>
+            <id>instrument-classes</id>
+            <phase>process-classes</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <executable>java</executable>
+              <arguments>
+                <argument>-jar</argument>
+                <argument>${jcov.jar}</argument>
+                <argument>Instr</argument>
+                <argument>-t</argument>
+                <argument>${jcov.template.xml}</argument>
+                <argument>-o</argument>
+                <argument>${project.build.instr.outputDirectory}</argument>
+                <argument>${project.build.outputDirectory}</argument>
+              </arguments>
+            </configuration>
+          </execution>
+
+          <!-- Merge the unit test results with the template -->
+          <execution>
+            <id>merge-unit-coverage</id>
+            <phase>post-integration-test</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <executable>java</executable>
+              <arguments>
+                <argument>-jar</argument>
+                <argument>${jcov.jar}</argument>
+                <argument>Merger</argument>
+                <argument>-o</argument>
+                <argument>${jcov.unit.coverage.xml}</argument>
+                <argument>${jcov.template.xml}</argument>
+                <argument>${jcov.unit.result.xml}</argument>
+              </arguments>
+            </configuration>
+          </execution>
+
+          <!-- Merge the stress test results with the template -->
+          <execution>
+            <id>merge-stress-coverage</id>
+            <phase>post-integration-test</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <executable>java</executable>
+              <arguments>
+                <argument>-jar</argument>
+                <argument>${jcov.jar}</argument>
+                <argument>Merger</argument>
+                <argument>-o</argument>
+                <argument>${jcov.stress.coverage.xml}</argument>
+                <argument>${jcov.template.xml}</argument>
+                <argument>${jcov.stress.result.xml}</argument>
+              </arguments>
+            </configuration>
+          </execution>
+
+          <!-- Generate the coverage reports -->
+          <execution>
+            <id>coverage-report</id>
+            <phase>post-integration-test</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <executable>java</executable>
+              <arguments>
+                <argument>-jar</argument>
+                <argument>${jcov.jar}</argument>
+                <argument>RepGen</argument>
+                <argument>-src</argument>
+                <argument>${project.build.sourceDirectory}</argument>
+                <argument>-o</argument>
+                <argument>${jcov.report.dir}</argument>
+                <argument>${jcov.unit.coverage.xml}</argument>
+              </arguments>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+  <reporting>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <version>2.10.4</version>
+        <configuration>
+          <show>public</show>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-report-plugin</artifactId>
+        <version>2.19</version>
+      </plugin>
+    </plugins>
+  </reporting>
+</project>
