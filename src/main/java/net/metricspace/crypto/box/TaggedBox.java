@@ -29,7 +29,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package net.metricspace.crypto.tools;
+package net.metricspace.crypto.box;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -61,11 +61,11 @@ import net.metricspace.crypto.exceptions.IntegrityCheckException;
  */
 public class TaggedBox extends AbstractBox<TaggedBox.Secret> {
     /**
-     * Data used to reconstruct a {@link Secret} from a secret
-     * bytestring.  This includes the names of the algorithms, as well
-     * as a tag, which is concatenated to the secret bytestring,
-     * hashed, then used as a seed to a deterministic pseudorandom
-     * function.
+     * Data used to reconstruct a {@link TaggedBox.Secret} from a
+     * secret bytestring.  This includes the names of the algorithms,
+     * as well as a tag, which is concatenated to the secret
+     * bytestring, hashed, then used as a seed to a deterministic
+     * pseudorandom function.
      */
     public static final class Tag extends Authenticated<Tag.Secret> {
         /**
@@ -79,6 +79,10 @@ public class TaggedBox extends AbstractBox<TaggedBox.Secret> {
              * @param macKeyData The raw data to use as the key.
              * @param macParamsData The raw data to use as the MAC
              *                      parameters, or {@code null}.
+             * @throws NoSuchAlgorithmException If {@code mac} does
+             *                                  not refer to a
+             *                                  registered algorithm
+             *                                  instance.
              */
             public Secret(final String mac,
                           final byte[] macKeyData,
@@ -162,11 +166,15 @@ public class TaggedBox extends AbstractBox<TaggedBox.Secret> {
         }
     }
 
+    /**
+     * Secret information used to unlock a {@link TaggedBox}.  Can be
+     * reconstructed from a {@link Tag} and a secret bytestring.
+     */
     public final class Secret extends AbstractBox.Secret {
         /**
          * Secret for use for authenticating {@link Tag}s.
          */
-        private final Tag.Secret tagAuth;
+        private final Tag.Secret tagCode;
 
         /**
          * Initialize {@code Secret} for a {@code TaggedBox} from the
@@ -177,22 +185,32 @@ public class TaggedBox extends AbstractBox<TaggedBox.Secret> {
          * @param cipherParamsData The raw data to use as the cipher parameters.
          * @param mac The MAC algorithm to use.
          * @param macKeyData The raw data to use as the MAC key.
-         * @param macIVData The raw data to use as the MAC IV, or
-         *                  {@code null}.
+         * @param macParamsData The raw data to use as the MAC IV, or
+         *                      {@code null}.
+         * @param tagCode MAC code for the tag.
+         * @throws IOException If a low-level IO error occurs.
+         * @throws NoSuchAlgorithmException If {@code cipher} or
+         *                                  {@code mac} do not refer
+         *                                  to a registered algorithm
+         *                                  instance.
+         * @throws NoSuchPaddingException If {@code cipher} refers to
+         *                                a padding algorithm which
+         *                                does not have a registered
+         *                                instance.
          */
         private Secret(final String cipher,
                        final byte[] cipherKeyData,
                        final byte[] cipherParamsData,
                        final String mac,
                        final byte[] macKeyData,
-                       final byte[] macIVData,
-                       final Tag.Secret tagAuth)
+                       final byte[] macParamsData,
+                       final Tag.Secret tagCode)
             throws NoSuchAlgorithmException, NoSuchPaddingException,
                    IOException {
             super(cipher, cipherKeyData, cipherParamsData,
-                  mac, macKeyData, macIVData);
+                  mac, macKeyData, macParamsData);
 
-            this.tagAuth = tagAuth;
+            this.tagCode = tagCode;
         }
 
         /**
@@ -202,7 +220,7 @@ public class TaggedBox extends AbstractBox<TaggedBox.Secret> {
         public void destroy()
             throws DestroyFailedException {
             super.destroy();
-            tagAuth.destroy();
+            tagCode.destroy();
         }
 
         /**
@@ -210,7 +228,7 @@ public class TaggedBox extends AbstractBox<TaggedBox.Secret> {
          */
         @Override
         public boolean isDestroyed() {
-            return super.isDestroyed() && tagAuth.isDestroyed();
+            return super.isDestroyed() && tagCode.isDestroyed();
         }
     }
 
@@ -224,7 +242,9 @@ public class TaggedBox extends AbstractBox<TaggedBox.Secret> {
      * Create a box from its components.
      *
      * @param data The encrypted data.
-     * @param mac The MAC code.
+     * @param code The MAC code (for encrypted data only).
+     * @param tag The tag for resconstructing the {@link Secret} to
+     *            open this box.
      */
     private TaggedBox(final byte[] data,
                       final byte[] code,

@@ -29,7 +29,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package net.metricspace.crypto.tools;
+package net.metricspace.crypto.box;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -56,12 +56,14 @@ import javax.security.auth.DestroyFailedException;
 
 import net.metricspace.crypto.exceptions.IntegrityCheckException;
 
+import net.metricspace.crypto.tools.AlgorithmSpecific;
+
 /**
  * Common superclass for box-like constructions.  This contains most
  * of the logic for implementing various kinds of boxes.
  *
- * @see net.metricspace.crypto.tools.Box
- * @see net.metricspace.crypto.tools.TaggedBox
+ * @see net.metricspace.crypto.box.Box
+ * @see net.metricspace.crypto.box.TaggedBox
  */
 abstract class AbstractBox<S extends AbstractBox.Secret>
     extends Authenticated<S> {
@@ -104,6 +106,14 @@ abstract class AbstractBox<S extends AbstractBox.Secret>
          *                  java.security.spec.AlgorithmParameterSpec} for
          *                  the {@link javax.crypto.Mac}, or {@code
          *                  null}.
+         * @throws NoSuchAlgorithmException If {@code cipher} or
+         *                                  {@code mac} do not refer
+         *                                  to a registered algorithm
+         *                                  instance.
+         * @throws NoSuchPaddingException If {@code cipher} refers to
+         *                                a padding algorithm which
+         *                                does not have a registered
+         *                                instance.
          */
         protected Secret(final String cipher,
                          final SecretKey cipherKey,
@@ -163,6 +173,14 @@ abstract class AbstractBox<S extends AbstractBox.Secret>
          * @param macKeyData The raw data to use as the MAC key.
          * @param macIVData The raw data to use as the MAC IV, or
          *                  {@code null}.
+         * @throws NoSuchAlgorithmException If {@code cipher} or
+         *                                  {@code mac} do not refer
+         *                                  to a registered algorithm
+         *                                  instance.
+         * @throws NoSuchPaddingException If {@code cipher} refers to
+         *                                a padding algorithm which
+         *                                does not have a registered
+         *                                instance.
          */
         private Secret(final String cipher,
                        final SecretKey cipherKey,
@@ -216,6 +234,15 @@ abstract class AbstractBox<S extends AbstractBox.Secret>
          * @param macKeyData The raw data to use as the MAC key.
          * @param macIVData The raw data to use as the MAC IV, or
          *                  {@code null}.
+         * @throws IOException If a low-level IO error occurs.
+         * @throws NoSuchAlgorithmException If {@code cipher} or
+         *                                  {@code mac} do not refer
+         *                                  to a registered algorithm
+         *                                  instance.
+         * @throws NoSuchPaddingException If {@code cipher} refers to
+         *                                a padding algorithm which
+         *                                does not have a registered
+         *                                instance.
          */
         protected Secret(final String cipher,
                          final byte[] cipherKeyData,
@@ -240,6 +267,7 @@ abstract class AbstractBox<S extends AbstractBox.Secret>
          * @param macKeyData The raw data to use as the MAC key.
          * @param macIVData The raw data to use as the MAC IV, or
          *                  {@code null}.
+         * @throws IOException If a low-level IO error occurs.
          */
         protected Secret(final Cipher cipher,
                          final byte[] cipherKeyData,
@@ -268,6 +296,14 @@ abstract class AbstractBox<S extends AbstractBox.Secret>
          *                     javax.crypto.Cipher}.
          * @param mac The MAC algorithm to use.
          * @param random The random source to use.
+         * @throws NoSuchAlgorithmException If {@code cipher} or
+         *                                  {@code mac} do not refer
+         *                                  to a registered algorithm
+         *                                  instance.
+         * @throws NoSuchPaddingException If {@code cipher} refers to
+         *                                a padding algorithm which
+         *                                does not have a registered
+         *                                instance.
          */
         private Secret(final String cipher,
                        final SecretKey cipherKey,
@@ -313,6 +349,14 @@ abstract class AbstractBox<S extends AbstractBox.Secret>
          * @param cipher Cipher algorithm to use.
          * @param mac The MAC algorithm to use.
          * @param random The random source to use.
+         * @throws NoSuchAlgorithmException If {@code cipher} or
+         *                                  {@code mac} do not refer
+         *                                  to a registered algorithm
+         *                                  instance.
+         * @throws NoSuchPaddingException If {@code cipher} refers to
+         *                                a padding algorithm which
+         *                                does not have a registered
+         *                                instance.
          */
         protected Secret(final String cipher,
                          final String mac,
@@ -339,15 +383,20 @@ abstract class AbstractBox<S extends AbstractBox.Secret>
         }
 
         /**
-         * Get a fully-initialized {@link javax.security.Cipher} instance
+         * Get a fully-initialized {@link javax.crypto.Cipher} instance
          * using this {@code Secret}.
          *
          * @param mode The cipher mode to use.
-         * @return A fully-initialized {@link javax.security.Cipher}
+         * @return A fully-initialized {@link javax.crypto.Cipher}
          *         instance using this {@code Secret}.
+         * @throws IllegalStateException If the {@link
+         *                               javax.crypto.Cipher} could
+         *                               not be initialized, possibly
+         *                               due to registered algorithms
+         *                               changing since the {@code
+         *                               AbstractBox} was created.
          */
-        public final Cipher getCipher(final int mode)
-            throws NoSuchAlgorithmException, NoSuchPaddingException {
+        public final Cipher getCipher(final int mode) {
             try {
                 final Cipher out = Cipher.getInstance(cipher);
 
@@ -355,7 +404,9 @@ abstract class AbstractBox<S extends AbstractBox.Secret>
 
                 return out;
             } catch(final InvalidAlgorithmParameterException |
-                          InvalidKeyException e) {
+                          InvalidKeyException |
+                          NoSuchAlgorithmException |
+                          NoSuchPaddingException e) {
                 throw new IllegalStateException(e);
             }
         }
@@ -388,7 +439,7 @@ abstract class AbstractBox<S extends AbstractBox.Secret>
      * Initialize an {@code AbstractBox} from its components.
      *
      * @param data The encrypted data.
-     * @param mac The MAC code.
+     * @param code The MAC code.
      */
     protected AbstractBox(final byte[] data,
                           final byte[] code) {
@@ -405,19 +456,6 @@ abstract class AbstractBox<S extends AbstractBox.Secret>
     }
 
     /**
-     * Decrypt the box contents.  No authentication in performed.
-     *
-     * @param secret {@code Secret} to use.
-     * @return The raw decrypted contents.
-     */
-    private CipherInputStream decrypt(final S secret)
-        throws InvalidAlgorithmParameterException, InvalidKeyException,
-               NoSuchAlgorithmException, NoSuchPaddingException {
-        return new CipherInputStream(new ByteArrayInputStream(data),
-                                     secret.getCipher(Cipher.DECRYPT_MODE));
-    }
-
-    /**
      * Obtain the decrypted contents.
      *
      * @param secret {@code Secret} to use.
@@ -425,14 +463,22 @@ abstract class AbstractBox<S extends AbstractBox.Secret>
      * @throws IntegrityCheckException If MAC verification fails.
      */
     public final CipherInputStream unlock(final S secret)
-        throws IntegrityCheckException, InvalidAlgorithmParameterException,
-               InvalidKeyException, NoSuchAlgorithmException,
-               NoSuchPaddingException {
+        throws IntegrityCheckException {
         if (!verify(secret)) {
             throw new IntegrityCheckException(secret.mac);
         }
 
-        return decrypt(secret);
+        return unlockUnverified(secret);
     }
 
+    /**
+     * Obtain the decrypted contents, without performing verification
+     *
+     * @param secret {@code Secret} to use.
+     * @return A stream containing the raw contents of the {@code Box}.
+     */
+    public final CipherInputStream unlockUnverified(final S secret) {
+        return new CipherInputStream(new ByteArrayInputStream(data),
+                                     secret.getCipher(Cipher.DECRYPT_MODE));
+    }
 }

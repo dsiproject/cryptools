@@ -29,7 +29,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package net.metricspace.crypto.tools;
+package net.metricspace.crypto.box;
 
 import java.security.InvalidKeyException;
 import java.security.InvalidAlgorithmParameterException;
@@ -47,6 +47,8 @@ import javax.crypto.SecretKey;
 import javax.security.auth.DestroyFailedException;
 import javax.security.auth.Destroyable;
 
+import net.metricspace.crypto.tools.AlgorithmSpecific;
+
 /**
  * Authenticated objects.  This is a common superclass for objects
  * that can be authenticated against some secret using a MAC
@@ -54,7 +56,7 @@ import javax.security.auth.Destroyable;
  */
 public abstract class Authenticated<S extends Authenticated.Secret> {
     /**
-     * Secrets against which {@code Authenticated} objects are
+     * Secrets against which {@link Authenticated} objects are
      * authenticated.
      */
     public static abstract class Secret implements Destroyable {
@@ -84,6 +86,9 @@ public abstract class Authenticated<S extends Authenticated.Secret> {
          *                  java.security.spec.AlgorithmParameterSpec}
          *                  for the {@link javax.crypto.Mac}, or
          *                  {@code null}.
+         * @throws NoSuchAlgorithmException If {@code mac} does not
+         *                                  refer to a registered
+         *                                  algorithm instance.
          */
         protected Secret(final String mac,
                          final SecretKey macKey,
@@ -117,6 +122,9 @@ public abstract class Authenticated<S extends Authenticated.Secret> {
          * @param macKeyData The raw data to use as the key.
          * @param macParamData The raw data to use as the MAC IV, or
          *                     {@code null}.
+         * @throws NoSuchAlgorithmException If {@code mac} does not
+         *                                  refer to a registered
+         *                                  algorithm instance.
          */
         protected Secret(final String mac,
                          final byte[] macKeyData,
@@ -145,6 +153,9 @@ public abstract class Authenticated<S extends Authenticated.Secret> {
          *
          * @param mac The MAC algorithm to use.
          * @param random The random source to use.
+         * @throws NoSuchAlgorithmException If {@code mac} does not
+         *                                  refer to a registered
+         *                                  algorithm instance.
          */
         protected Secret(final String mac,
                          final SecureRandom random)
@@ -165,10 +176,10 @@ public abstract class Authenticated<S extends Authenticated.Secret> {
         }
 
         /**
-         * Get a fully-initialized {@link javax.security.Mac} instance
+         * Get a fully-initialized {@link javax.crypto.Mac} instance
          * for authenticating against this {@code Secret}.
          *
-         * @return A fully-initialized {@link javax.security.Mac}
+         * @return A fully-initialized {@link javax.crypto.Mac}
          *         instance for authenticating against this {@code Secret}.
          */
         public final Mac getMac() {
@@ -215,7 +226,7 @@ public abstract class Authenticated<S extends Authenticated.Secret> {
     /**
      * Initialize the authenticated object.
      *
-     * @param The MAC code for the underlying data.
+     * @param code The MAC code for the underlying data.
      */
     protected Authenticated(final byte[] code) {
         this.code = code;
@@ -225,8 +236,8 @@ public abstract class Authenticated<S extends Authenticated.Secret> {
      * Add all data for this object into the {@link javax.crypto.Mac}
      * instance.
      *
-     * @params mac The {@link javax.crypto.Mac} into which to add all
-     *             data.
+     * @param mac The {@link javax.crypto.Mac} into which to add all
+     *            data.
      */
     protected abstract void insertData(final Mac mac);
 

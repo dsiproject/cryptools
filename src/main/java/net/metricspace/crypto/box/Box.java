@@ -29,7 +29,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package net.metricspace.crypto.tools;
+package net.metricspace.crypto.box;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -84,6 +84,14 @@ public final class Box extends AbstractBox<Box.Secret> {
          *                  java.security.spec.AlgorithmParameterSpec} for
          *                  the {@link javax.crypto.Mac}, or {@code
          *                  null}.
+         * @throws NoSuchAlgorithmException If {@code cipher} or
+         *                                  {@code mac} do not refer
+         *                                  to a registered algorithm
+         *                                  instance.
+         * @throws NoSuchPaddingException If {@code cipher} refers to
+         *                                a padding algorithm which
+         *                                does not have a registered
+         *                                instance.
          */
         public Secret(final String cipher,
                       final SecretKey cipherKey,
@@ -133,6 +141,15 @@ public final class Box extends AbstractBox<Box.Secret> {
          * @param macKeyData The raw data to use as the MAC key.
          * @param macParamsData The raw data to use as the MAC params,
          *                      or {@code null}.
+         * @throws IOException If a low-level IO error occurs.
+         * @throws NoSuchAlgorithmException If {@code cipher} or
+         *                                  {@code mac} do not refer
+         *                                  to a registered algorithm
+         *                                  instance.
+         * @throws NoSuchPaddingException If {@code cipher} refers to
+         *                                a padding algorithm which
+         *                                does not have a registered
+         *                                instance.
          */
         public Secret(final String cipher,
                       final byte[] cipherKeyData,
@@ -156,6 +173,7 @@ public final class Box extends AbstractBox<Box.Secret> {
          * @param macKeyData The raw data to use as the MAC key.
          * @param macParamsData The raw data to use as the MAC params,
          *                      or {@code null}.
+         * @throws IOException If a low-level IO error occurs.
          */
         public Secret(final Cipher cipher,
                       final byte[] cipherKeyData,
@@ -175,6 +193,14 @@ public final class Box extends AbstractBox<Box.Secret> {
          * @param cipher Cipher algorithm to use.
          * @param mac The MAC algorithm to use.
          * @param random The random source to use.
+         * @throws NoSuchAlgorithmException If {@code cipher} or
+         *                                  {@code mac} do not refer
+         *                                  to a registered algorithm
+         *                                  instance.
+         * @throws NoSuchPaddingException If {@code cipher} refers to
+         *                                a padding algorithm which
+         *                                does not have a registered
+         *                                instance.
          */
         public Secret(final String cipher,
                       final String mac,
@@ -202,7 +228,7 @@ public final class Box extends AbstractBox<Box.Secret> {
      * Create a box from its components.
      *
      * @param data The encrypted data.
-     * @param mac The MAC code.
+     * @param code The MAC code for encrypted data.
      */
     private Box(final byte[] data,
                 final byte[] code) {

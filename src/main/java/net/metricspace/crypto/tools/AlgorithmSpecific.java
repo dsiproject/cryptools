@@ -53,7 +53,7 @@ import javax.crypto.spec.SecretKeySpec;
  * keys and algorithm parameters typically requires cipher-specific
  * knowledge.
  */
-final class AlgorithmSpecific {
+public final class AlgorithmSpecific {
     /**
      * Private constructor precludes instantiation.
      */
@@ -67,6 +67,10 @@ final class AlgorithmSpecific {
      * @param random Random number source to use for key generation.
      * @return A randomly-generated {@link java.security.Key} for
      *         the {@link javax.crypto.Mac}
+     * @throws IllegalStateException If there is no {@link
+     *                               java.security.AlgorithmParameters}
+     *                               instance for the {@link
+     *                               javax.crypto.Mac} algorithm.
      */
     public static SecretKey generateMacKey(final Mac mac,
                                            final SecureRandom random) {
@@ -91,6 +95,14 @@ final class AlgorithmSpecific {
      * @param data The raw data for the {@link java.security.Key}.
      * @return A randomly-generated {@link java.security.Key} for
      *         the {@link javax.crypto.Mac}
+     * @throws IllegalStateException If there is no {@link
+     *                               javax.crypto.SecretKeyFactory}
+     *                               instance for the {@link
+     *                               javax.crypto.Mac} algorithm,
+     *                               or if the {@link
+     *                               javax.crypto.SecretKeyFactory}
+     *                               does not take a {@link
+     *                               javax.crypto.spec.SecretKeySpec}
      */
     public static SecretKey decodeMacKey(final Mac mac,
                                          final byte[] data) {
@@ -111,7 +123,7 @@ final class AlgorithmSpecific {
      * @param mac Mac algorithm to use.
      * @param random Random number source to use for IV generation.
      * @return A randomly-generated {@link
-     *         java.security.AlgorithmParameterSpec} for the {@link
+     *         java.security.spec.AlgorithmParameterSpec} for the {@link
      *         javax.crypto.Mac}
      */
     public static AlgorithmParameterSpec
@@ -125,6 +137,7 @@ final class AlgorithmSpecific {
      * for the {@link javax.crypto.Mac} from raw data, or return
      * {@code null} if not applicable.
      *
+     * @param mac The MAC algorithm.
      * @param data The raw data to decode, or {@code null}.
      * @return The decoded {@link
      *         java.security.spec.AlgorithmParameterSpec} for the
@@ -148,6 +161,14 @@ final class AlgorithmSpecific {
      * @param data The raw data for the {@link java.security.Key}.
      * @return A randomly-generated {@link java.security.Key} for
      *         the {@link javax.crypto.Cipher}
+     * @throws IllegalStateException If there is no {@link
+     *                               javax.crypto.SecretKeyFactory}
+     *                               instance for the {@link
+     *                               javax.crypto.Cipher} algorithm,
+     *                               or if the {@link
+     *                               javax.crypto.SecretKeyFactory}
+     *                               does not take a {@link
+     *                               javax.crypto.spec.SecretKeySpec}
      */
     public static SecretKey decodeCipherKey(final Cipher cipher,
                                             final byte[] data) {
@@ -164,10 +185,14 @@ final class AlgorithmSpecific {
      * Generate a {@link java.security.Key} for the {@link
      * javax.crypto.Cipher}.
      *
-     * @param mac Mac algorithm to use.
+     * @param cipher Mac algorithm to use.
      * @param random Random number source to use for key generation.
      * @return A randomly-generated {@link java.security.Key} for
      *         the {@link javax.crypto.Mac}
+     * @throws IllegalStateException If there is no {@link
+     *                               java.security.AlgorithmParameters}
+     *                               instance for the {@link
+     *                               javax.crypto.Cipher} algorithm.
      */
     public static SecretKey generateCipherKey(final Cipher cipher,
                                               final SecureRandom random) {
@@ -188,10 +213,16 @@ final class AlgorithmSpecific {
      * Decode the {@link java.security.AlgorithmParameters} for
      * the {@link javax.crypto.Cipher} from raw data.
      *
+     * @param cipher The cipher algorithm.
      * @param data The raw data to decode.
      * @return The decoded {@link
      *         java.security.AlgorithmParameters} for the {@link
      *         javax.crypto.Cipher}.
+     * @throws IOException If a low-level IO error occurs.
+     * @throws IllegalStateException If there is no {@link
+     *                               java.security.AlgorithmParameters}
+     *                               instance for the {@link
+     *                               javax.crypto.Cipher} algorithm.
      */
     public static AlgorithmParameters
         decodeCipherParams(final Cipher cipher,
