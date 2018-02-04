@@ -31,40 +31,193 @@
  */
 package net.metricspace.crypto.tools;
 
-public class TaggedBox<T> extends AbstractBox<T, AbstractBox.Keys> {
+import java.io.IOException;
+import java.io.InputStream;
 
-    public static final class Tag {
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+
+import javax.crypto.Mac;
+import javax.crypto.NoSuchPaddingException;
+
+import javax.security.auth.DestroyFailedException;
+
+import net.metricspace.crypto.exceptions.IntegrityCheckException;
+
+/**
+ * Boxes tagged with additional information allowing their {@link
+ * TaggedBox.Secret}s be recovered from secret bytestring, such as a
+ * password.  This is accomplished by storing information in a {@link
+ * TaggedBox.Tag}, which is combined with the secret bytestring and
+ * hashed to produce the {@link TaggedBox.Secret} which unlocks the
+ * box.
+ *
+ * The reconstructed {@link TaggedBox.Secret} can be safely shared
+ * without divulging the secret bytestring; reconstructing it would
+ * require both reversing a secure deterministic pseudorandom
+ * generator and then pre-imaging the hash function used to compute its
+ * seed.
+ */
+public class TaggedBox extends AbstractBox<TaggedBox.Secret> {
+    /**
+     * Data used to reconstruct a {@link Secret} from a secret
+     * bytestring.  This includes the names of the algorithms, as well
+     * as a tag, which is concatenated to the secret bytestring,
+     * hashed, then used as a seed to a deterministic pseudorandom
+     * function.
+     */
+    public static final class Tag extends Authenticated<Tag.Secret> {
         /**
-         * The tag portion for the cipher key.
+         * Authentication secret for {@code Tag}s only.
          */
-        public final byte[] cipherKey;
+        public static final class Secret extends Authenticated.Secret {
+            /**
+             * Initialize this {@code Secret} from its essential data.
+             *
+             * @param mac The MAC algorithm to use.
+             * @param macKeyData The raw data to use as the key.
+             * @param macParamsData The raw data to use as the MAC
+             *                      parameters, or {@code null}.
+             */
+            public Secret(final String mac,
+                          final byte[] macKeyData,
+                          final byte[] macParamsData)
+                throws NoSuchAlgorithmException {
+                super(mac, macKeyData, macParamsData);
+            }
+        }
 
         /**
-         * The tag portion for the mac key.
+         * Algorithm specifier for the {@link javax.crypto.Mac} used
+         * to authenticate the box contents.
          */
-        public final byte[] macKey;
+        public final String mac;
 
         /**
-         * The tag portion for the cipher parameters.
+         * Algorithm specifier for the {@link javax.crypto.Cipher} used
+         * to encrypt the box contents.
          */
-        public final byte[] cipherParams;
+        public final String cipher;
 
         /**
-         * The tag portion for the mac parameters.
+         * Algorithm specifier for the {@link
+         * java.security.MessageDigest} used to generate the seed for
+         * the deterministic pseudorandom generator.
          */
-        public final byte[] macParams;
+        public final String hash;
 
-        public Tag(final byte[] cipherKey,
-                   final byte[] macKey,
-                   final byte[] cipherParams,
-                   final byte[] macParams) {
-            this.cipherKey = cipherKey;
-            this.macKey = macKey;
-            this.cipherParams = cipherParams;
-            this.macParams = macParams;
+        /**
+         * Algorithm specifier for the {@link
+         * java.security.SecureRandom}, which must be a deterministic
+         * generator, which is used to generate keys and IVs for the
+         * {@link javax.crypto.Mac} and {@link javax.crypto.Cipher}.
+         */
+        public final String drbg;
+
+        /**
+         * The tag data.
+         */
+        public final byte[] tag;
+
+        /**
+         * Initialize a {@code Tag} from its essential components.
+         *
+         * @param mac The algorithm specifier for the {@link javax.crypto.Mac}.
+         * @param cipher The algorithm specifier for the {@link
+         *               javax.crypto.Cipher}
+         * @param hash The algorithm specifier for the {@link
+         *             java.security.MessageDigest}
+         * @param drbg The algorithm specifier for the {@link
+         *             java.security.SecureRandom}
+         * @param tag The data to be appendend to a secret bytestring
+         *            to reconstruct the {@link TaggedBox.Secret}.
+         * @param code The MAC code used to authenticate this {@code Tag}.
+         */
+        public Tag(final String mac,
+                   final String cipher,
+                   final String hash,
+                   final String drbg,
+                   final byte[] tag,
+                   final byte[] code) {
+            super(code);
+
+            this.mac = mac;
+            this.cipher = cipher;
+            this.hash = hash;
+            this.drbg = drbg;
+            this.tag = tag;
+        }
+
+        /**
+         * {@inheritDoc}
+         */
+        @Override
+        protected void insertData(final Mac m) {
+            m.update(mac.getBytes());
+            m.update(cipher.getBytes());
+            m.update(hash.getBytes());
+            m.update(drbg.getBytes());
+            m.update(tag);
         }
     }
 
+    public final class Secret extends AbstractBox.Secret {
+        /**
+         * Secret for use for authenticating {@link Tag}s.
+         */
+        private final Tag.Secret tagAuth;
+
+        /**
+         * Initialize {@code Secret} for a {@code TaggedBox} from the
+         * basic components.
+         *
+         * @param cipher Cipher specification used to decrypt the {@code Box}.
+         * @param cipherKeyData The raw data to use as the cipher key.
+         * @param cipherParamsData The raw data to use as the cipher parameters.
+         * @param mac The MAC algorithm to use.
+         * @param macKeyData The raw data to use as the MAC key.
+         * @param macIVData The raw data to use as the MAC IV, or
+         *                  {@code null}.
+         */
+        private Secret(final String cipher,
+                       final byte[] cipherKeyData,
+                       final byte[] cipherParamsData,
+                       final String mac,
+                       final byte[] macKeyData,
+                       final byte[] macIVData,
+                       final Tag.Secret tagAuth)
+            throws NoSuchAlgorithmException, NoSuchPaddingException,
+                   IOException {
+            super(cipher, cipherKeyData, cipherParamsData,
+                  mac, macKeyData, macIVData);
+
+            this.tagAuth = tagAuth;
+        }
+
+        /**
+         * {@inheritDoc}
+         */
+        @Override
+        public void destroy()
+            throws DestroyFailedException {
+            super.destroy();
+            tagAuth.destroy();
+        }
+
+        /**
+         * {@inheritDoc}
+         */
+        @Override
+        public boolean isDestroyed() {
+            return super.isDestroyed() && tagAuth.isDestroyed();
+        }
+    }
+
+    /**
+     * The {@link Tag} used to recover the {@link Secret} for this
+     * {@code TaggedBox}.
+     */
     private final Tag tag;
 
     /**
@@ -80,4 +233,5 @@ public class TaggedBox<T> extends AbstractBox<T, AbstractBox.Keys> {
 
         this.tag = tag;
     }
+
 }

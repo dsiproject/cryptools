@@ -32,21 +32,26 @@
 package net.metricspace.crypto.tools;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
-import java.security.Key;
+import java.security.AlgorithmParameters;
 import java.security.NoSuchAlgorithmException;
 import java.security.InvalidKeyException;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.spec.AlgorithmParameterSpec;
+import java.security.SecureRandom;
 
 import java.util.Arrays;
 
 import javax.crypto.Cipher;
 import javax.crypto.CipherInputStream;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.BadPaddingException;
 import javax.crypto.NoSuchPaddingException;
 import javax.crypto.Mac;
+import javax.crypto.SecretKey;
 
 import net.metricspace.crypto.exceptions.IntegrityCheckException;
 
@@ -56,7 +61,143 @@ import net.metricspace.crypto.exceptions.IntegrityCheckException;
  * single-use keys.  The {@code Box} API is specifically designed to
  * prevent the reuse of {@code Key}s.
  */
-public final class Box<T> extends AbstractBox<T, AbstractBox.Keys> {
+public final class Box extends AbstractBox<Box.Secret> {
+
+    /**
+     * Secret information used to unlock a {@link Box}.
+     */
+    public static final class Secret extends AbstractBox.Secret {
+        /**
+         * Initialize {@code Secret} for a {@code Box} from
+         * the basic components.
+         *
+         * @param cipher The cipher algorithm to use.
+         * @param cipherKey The {@link java.security.Key} to use with
+         *                  the {@link javax.crypto.Cipher}.
+         * @param cipherParams The {@link
+         *                     java.security.AlgorithmParameters} to
+         *                     use with the {@link
+         *                     javax.crypto.Cipher}.
+         * @param mac The MAC algorithm to use.
+         * @param macKey The {@link java.security.Key} to use.
+         * @param macParams The {@link
+         *                  java.security.spec.AlgorithmParameterSpec} for
+         *                  the {@link javax.crypto.Mac}, or {@code
+         *                  null}.
+         */
+        public Secret(final String cipher,
+                      final SecretKey cipherKey,
+                      final AlgorithmParameters cipherParams,
+                      final String mac,
+                      final SecretKey macKey,
+                      final AlgorithmParameterSpec macParams)
+            throws NoSuchAlgorithmException, NoSuchPaddingException {
+            super(cipher, cipherKey, cipherParams, mac, macKey, macParams);
+        }
+
+        /**
+         * Initialize {@code Secret} for a {@code Box} from the basic
+         * components.
+         *
+         * @param cipher The cipher algorithm to use.
+         * @param cipherKey The {@link java.security.Key} to use with
+         *                  the {@link javax.crypto.Cipher}.
+         * @param cipherParams The {@link
+         *                     java.security.AlgorithmParameters} to
+         *                     use with the {@link
+         *                     javax.crypto.Cipher}.
+         * @param mac The MAC algorithm to use.
+         * @param macKey The {@link java.security.Key} to use.
+         * @param macParams The {@link
+         *                  java.security.spec.AlgorithmParameterSpec} for
+         *                  the {@link javax.crypto.Mac}, or {@code
+         *                  null}.
+         */
+        public Secret(final Cipher cipher,
+                      final SecretKey cipherKey,
+                      final AlgorithmParameters cipherParams,
+                      final Mac mac,
+                      final SecretKey macKey,
+                      final AlgorithmParameterSpec macParams) {
+            super(cipher, cipherKey, cipherParams, mac, macKey, macParams);
+        }
+
+        /**
+         * Initialize {@code Secret} for a {@code Box} from the raw
+         * data.
+         *
+         * @param cipher Cipher algorithm to use.
+         * @param cipherKeyData The raw data to use as the cipher key.
+         * @param cipherParamsData The raw data to use as the cipher parameters.
+         * @param mac The MAC algorithm to use.
+         * @param macKeyData The raw data to use as the MAC key.
+         * @param macParamsData The raw data to use as the MAC params,
+         *                      or {@code null}.
+         */
+        public Secret(final String cipher,
+                      final byte[] cipherKeyData,
+                      final byte[] cipherParamsData,
+                      final String mac,
+                      final byte[] macKeyData,
+                      final byte[] macParamsData)
+            throws NoSuchAlgorithmException, NoSuchPaddingException,
+                   IOException {
+            super(cipher, cipherKeyData, cipherParamsData,
+                  mac, macKeyData, macParamsData);
+        }
+
+        /**
+         * Initialize {@code Secret} for a {@code Box} from the raw data..
+         *
+         * @param cipher Cipher algorithm to use.
+         * @param cipherKeyData The raw data to use as the cipher key.
+         * @param cipherParamsData The raw data to use as the cipher parameters.
+         * @param mac The MAC algorithm to use.
+         * @param macKeyData The raw data to use as the MAC key.
+         * @param macParamsData The raw data to use as the MAC params,
+         *                      or {@code null}.
+         */
+        public Secret(final Cipher cipher,
+                      final byte[] cipherKeyData,
+                      final byte[] cipherParamsData,
+                      final Mac mac,
+                      final byte[] macKeyData,
+                      final byte[] macParamsData)
+            throws IOException {
+            super(cipher, cipherKeyData, cipherParamsData,
+                  mac, macKeyData, macParamsData);
+        }
+
+        /**
+         * Initialize {@code Secret} for a {@code Box} from a random
+         * source.
+         *
+         * @param cipher Cipher algorithm to use.
+         * @param mac The MAC algorithm to use.
+         * @param random The random source to use.
+         */
+        public Secret(final String cipher,
+                      final String mac,
+                      final SecureRandom random)
+            throws NoSuchAlgorithmException, NoSuchPaddingException {
+            super(cipher, mac, random);
+        }
+
+        /**
+         * Initialize {@code Secret} for a {@code Box} from a random
+         * source.
+         *
+         * @param cipher Cipher algorithm to use.
+         * @param mac The MAC algorithm to use.
+         * @param random The random source to use.
+         */
+        public Secret(final Cipher cipher,
+                      final Mac mac,
+                      final SecureRandom random) {
+            super(cipher, mac, random);
+        }
+    }
+
     /**
      * Create a box from its components.
      *
@@ -68,4 +209,41 @@ public final class Box<T> extends AbstractBox<T, AbstractBox.Keys> {
         super(data, code);
     }
 
+    /**
+     * A {@code Box} and its corresponding {@code Secret}.
+     */
+    public static final class NewBox {
+        /**
+         * The {@code Box}.
+         */
+        public final Box box;
+
+        /**
+         * The {@code Secret} corresponding to the {@code Box}.
+         */
+        public final AbstractBox.Secret secret;
+
+        public NewBox(final Box box,
+                      final Secret secret) {
+            this.box = box;
+            this.secret = secret;
+        }
+    }
+
+    public static NewBox create(final String cipher,
+                                final String mac,
+                                final byte[] data,
+                                final SecureRandom random)
+        throws BadPaddingException, InvalidAlgorithmParameterException,
+               InvalidKeyException, IllegalBlockSizeException,
+               NoSuchAlgorithmException, NoSuchPaddingException {
+        final Secret secret = new Secret(cipher, mac, random);
+        final Cipher c = secret.getCipher(Cipher.ENCRYPT_MODE);
+        final Mac m = secret.getMac();
+        final byte[] encrypted = c.doFinal(data);
+        final byte[] code = m.doFinal(encrypted);
+        final Box box = new Box(encrypted, code);
+
+        return new NewBox(box, secret);
+    }
 }

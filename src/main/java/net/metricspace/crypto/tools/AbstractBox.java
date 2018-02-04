@@ -32,13 +32,16 @@
 package net.metricspace.crypto.tools;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
-import java.security.Key;
-import java.security.NoSuchAlgorithmException;
+import java.security.AlgorithmParameters;
 import java.security.InvalidKeyException;
 import java.security.InvalidAlgorithmParameterException;
+import java.security.Key;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.security.spec.AlgorithmParameterSpec;
 
 import java.util.Arrays;
@@ -47,87 +50,332 @@ import javax.crypto.Cipher;
 import javax.crypto.CipherInputStream;
 import javax.crypto.NoSuchPaddingException;
 import javax.crypto.Mac;
+import javax.crypto.SecretKey;
+
+import javax.security.auth.DestroyFailedException;
 
 import net.metricspace.crypto.exceptions.IntegrityCheckException;
 
 /**
- * Authenticated symmetric encryption primitive.  {@code Box}es are a
- * wrapper for symmetric encryption with authentication with
- * single-use keys.  The {@code Box} API is specifically designed to
- * prevent the reuse of {@code Key}s.
+ * Common superclass for box-like constructions.  This contains most
+ * of the logic for implementing various kinds of boxes.
+ *
+ * @see net.metricspace.crypto.tools.Box
+ * @see net.metricspace.crypto.tools.TaggedBox
  */
-public abstract class AbstractBox<T, K extends AbstractBox.Keys> {
+abstract class AbstractBox<S extends AbstractBox.Secret>
+    extends Authenticated<S> {
 
-    public static class Keys {
+    /**
+     * Secret for authenticating and unlocking an {@code AbstractBox}.
+     */
+    public static abstract class Secret extends Authenticated.Secret {
         /**
          * Cipher to use to decrypt the contents.
          */
         public final String cipher;
 
         /**
-         * MAC to use to authenticate the contents.
+         * The {@link java.security.Key} for the {@link
+         * javax.crypto.Cipher}.
          */
-        public final String mac;
+        protected final SecretKey cipherKey;
 
         /**
-         * {@link java.security.Key} used for decrypting the contents.
+         * The {@link java.security.AlgorithmParameters} for the {@link
+         * javax.crypto.Cipher}.
          */
-        public final Key cipherKey;
+        protected final AlgorithmParameters cipherParams;
 
         /**
-         * {@link java.security.Key} used for authenticating the contents.
-         */
-        public final Key macKey;
-
-        public final AlgorithmParameterSpec cipherParams;
-
-        public final AlgorithmParameterSpec macParams;
-
-        /**
-         * Initialize {@code Keys} for a {@code Box} from the basic
-         * components.
+         * Initialize {@code Secret} for an {@code AbstractBox} from
+         * the basic components.
          *
-         * @param cipher Cipher specification used to decrypt the {@code Box}.
-         * @param cipher MAC specification used to authenticate the {@code Box}.
-         * @param decrypt {@link java.security.Key} used for
-         *                decrypting the {@code Box}.
-         * @param auth {@link java.security.Key} used for
-         *             authenticating the {@code Box}.
+         * @param cipher The cipher algorithm to use.
+         * @param cipherKey The {@link java.security.Key} to use with
+         *                  the {@link javax.crypto.Cipher}.
+         * @param cipherParams The {@link
+         *                     java.security.AlgorithmParameters} to
+         *                     use with the {@link
+         *                     javax.crypto.Cipher}.
+         * @param mac The MAC algorithm to use.
+         * @param macKey The {@link java.security.Key} to use.
+         * @param macParams The {@link
+         *                  java.security.spec.AlgorithmParameterSpec} for
+         *                  the {@link javax.crypto.Mac}, or {@code
+         *                  null}.
          */
-        public Keys(final String cipher,
-                    final String mac,
-                    final Key cipherKey,
-                    final Key macKey,
-                    final AlgorithmParameterSpec cipherParams,
-                    final AlgorithmParameterSpec macParams) {
-            this.cipher = cipher;
-            this.mac = mac;
-            this.cipherKey = cipherKey;
-            this.macKey = macKey;
-            this.cipherParams = cipherParams;
-            this.macParams = macParams;
+        protected Secret(final String cipher,
+                         final SecretKey cipherKey,
+                         final AlgorithmParameters cipherParams,
+                         final String mac,
+                         final SecretKey macKey,
+                         final AlgorithmParameterSpec macParams)
+            throws NoSuchAlgorithmException, NoSuchPaddingException {
+            this(Cipher.getInstance(cipher), cipherKey, cipherParams,
+                 Mac.getInstance(mac), macKey, macParams);
         }
-    }
-
-    /**
-     * A {@code Box} and its corresponding {@code Keys}.
-     */
-    public static final class BoxKeys<T, B extends AbstractBox<T, K>,
-                                      K extends Keys> {
-        /**
-         * The {@code Box}.
-         */
-        public final B box;
 
         /**
-         * The {@code Keys} corresponding to the {@code Box}.
+         * Initialize {@code Secret} for an {@code AbstractBox} from
+         * the basic components.
+         *
+         * @param cipher The cipher algorithm to use.
+         * @param cipherKey The {@link java.security.Key} to use with
+         *                  the {@link javax.crypto.Cipher}.
+         * @param cipherParams The {@link
+         *                     java.security.AlgorithmParameters} to
+         *                     use with the {@link
+         *                     javax.crypto.Cipher}.
+         * @param mac The MAC algorithm to use.
+         * @param macKey The {@link java.security.Key} to use.
+         * @param macParams The {@link
+         *                  java.security.spec.AlgorithmParameterSpec} for
+         *                  the {@link javax.crypto.Mac}, or {@code
+         *                  null}.
          */
-        public final K keys;
+        protected Secret(final Cipher cipher,
+                         final SecretKey cipherKey,
+                         final AlgorithmParameters cipherParams,
+                         final Mac mac,
+                         final SecretKey macKey,
+                         final AlgorithmParameterSpec macParams) {
+            super(mac, macKey, macParams);
 
-        public BoxKeys(final B box,
-                       final K keys) {
-            this.box = box;
-            this.keys = keys;
+            this.cipher = cipher.getAlgorithm();
+            this.cipherKey = cipherKey;
+            this.cipherParams = cipherParams;
+        }
+
+        /**
+         * Initialize {@code Secret} for an {@code AbstractBox} from
+         * the the basic components for the cipher, and raw data for
+         * the MAC.
+         *
+         * @param cipher Cipher algorithm to use.
+         * @param cipherKey The {@link java.security.Key} to use with
+         *                  the {@link javax.crypto.Cipher}.
+         * @param cipherParams The {@link
+         *                     java.security.AlgorithmParameters} to
+         *                     use with the {@link
+         *                     javax.crypto.Cipher}.
+         * @param mac The MAC algorithm to use.
+         * @param macKeyData The raw data to use as the MAC key.
+         * @param macIVData The raw data to use as the MAC IV, or
+         *                  {@code null}.
+         */
+        private Secret(final String cipher,
+                       final SecretKey cipherKey,
+                       final AlgorithmParameters cipherParams,
+                       final String mac,
+                       final byte[] macKeyData,
+                       final byte[] macIVData)
+            throws NoSuchAlgorithmException, NoSuchPaddingException {
+            this(Cipher.getInstance(cipher), cipherKey, cipherParams,
+                 Mac.getInstance(mac), macKeyData, macIVData);
+        }
+
+        /**
+         * Initialize {@code Secret} for an {@code AbstractBox} from
+         * the the basic components for the cipher, and raw data for
+         * the MAC.
+         *
+         * @param cipher Cipher algorithm to use.
+         * @param cipherKey The {@link java.security.Key} to use with
+         *                  the {@link javax.crypto.Cipher}.
+         * @param cipherParams The {@link
+         *                     java.security.AlgorithmParameters} to
+         *                     use with the {@link
+         *                     javax.crypto.Cipher}.
+         * @param mac The MAC algorithm to use.
+         * @param macKeyData The raw data to use as the MAC key.
+         * @param macIVData The raw data to use as the MAC IV, or
+         *                  {@code null}.
+         */
+        private Secret(final Cipher cipher,
+                       final SecretKey cipherKey,
+                       final AlgorithmParameters cipherParams,
+                       final Mac mac,
+                       final byte[] macKeyData,
+                       final byte[] macIVData) {
+            super(mac, macKeyData, macIVData);
+
+            this.cipher = cipher.getAlgorithm();
+            this.cipherKey = cipherKey;
+            this.cipherParams = cipherParams;
+        }
+
+        /**
+         * Initialize {@code Secret} for an {@code AbstractBox} from
+         * the basic components.
+         *
+         * @param cipher Cipher algorithm to use.
+         * @param cipherKeyData The raw data to use as the cipher key.
+         * @param cipherParamsData The raw data to use as the cipher parameters.
+         * @param mac The MAC algorithm to use.
+         * @param macKeyData The raw data to use as the MAC key.
+         * @param macIVData The raw data to use as the MAC IV, or
+         *                  {@code null}.
+         */
+        protected Secret(final String cipher,
+                         final byte[] cipherKeyData,
+                         final byte[] cipherParamsData,
+                         final String mac,
+                         final byte[] macKeyData,
+                         final byte[] macIVData)
+            throws NoSuchAlgorithmException, NoSuchPaddingException,
+                   IOException {
+            this(Cipher.getInstance(cipher), cipherKeyData, cipherParamsData,
+                 Mac.getInstance(mac), macKeyData, macIVData);
+        }
+
+        /**
+         * Initialize {@code Secret} for an {@code AbstractBox} from
+         * the basic components.
+         *
+         * @param cipher Cipher algorithm to use.
+         * @param cipherKeyData The raw data to use as the cipher key.
+         * @param cipherParamsData The raw data to use as the cipher parameters.
+         * @param mac The MAC algorithm to use.
+         * @param macKeyData The raw data to use as the MAC key.
+         * @param macIVData The raw data to use as the MAC IV, or
+         *                  {@code null}.
+         */
+        protected Secret(final Cipher cipher,
+                         final byte[] cipherKeyData,
+                         final byte[] cipherParamsData,
+                         final Mac mac,
+                         final byte[] macKeyData,
+                         final byte[] macIVData)
+            throws IOException {
+            this(cipher,
+                 AlgorithmSpecific.decodeCipherKey(cipher, cipherKeyData),
+                 AlgorithmSpecific.decodeCipherParams(cipher, cipherParamsData),
+                 mac, macKeyData, macIVData);
+        }
+
+        /**
+         * Initialize {@code Secret} for an {@code AbstractBox} from
+         * the the basic components for the cipher, and a random
+         * source the MAC.
+         *
+         * @param cipher Cipher algorithm to use.
+         * @param cipherKey The {@link java.security.Key} to use with
+         *                  the {@link javax.crypto.Cipher}.
+         * @param cipherParams The {@link
+         *                     java.security.AlgorithmParameters} to
+         *                     use with the {@link
+         *                     javax.crypto.Cipher}.
+         * @param mac The MAC algorithm to use.
+         * @param random The random source to use.
+         */
+        private Secret(final String cipher,
+                       final SecretKey cipherKey,
+                       final AlgorithmParameters cipherParams,
+                       final String mac,
+                       final SecureRandom random)
+            throws NoSuchAlgorithmException, NoSuchPaddingException {
+            this(Cipher.getInstance(cipher), cipherKey, cipherParams,
+                 Mac.getInstance(mac), random);
+        }
+
+        /**
+         * Initialize {@code Secret} for an {@code AbstractBox} from
+         * the the basic components for the cipher, and a random
+         * source for the MAC.
+         *
+         * @param cipher Cipher algorithm to use.
+         * @param cipherKey The {@link java.security.Key} to use with
+         *                  the {@link javax.crypto.Cipher}.
+         * @param cipherParams The {@link
+         *                     java.security.AlgorithmParameters} to
+         *                     use with the {@link
+         *                     javax.crypto.Cipher}.
+         * @param mac The MAC algorithm to use.
+         * @param random The random source to use.
+         */
+        private Secret(final Cipher cipher,
+                       final SecretKey cipherKey,
+                       final AlgorithmParameters cipherParams,
+                       final Mac mac,
+                       final SecureRandom random) {
+            super(mac, random);
+
+            this.cipher = cipher.getAlgorithm();
+            this.cipherKey = cipherKey;
+            this.cipherParams = cipherParams;
+        }
+
+        /**
+         * Initialize {@code Secret} for an {@code AbstractBox} from
+         * a random source.
+         *
+         * @param cipher Cipher algorithm to use.
+         * @param mac The MAC algorithm to use.
+         * @param random The random source to use.
+         */
+        protected Secret(final String cipher,
+                         final String mac,
+                         final SecureRandom random)
+            throws NoSuchAlgorithmException, NoSuchPaddingException {
+            this(Cipher.getInstance(cipher), Mac.getInstance(mac), random);
+        }
+
+        /**
+         * Initialize {@code Secret} for an {@code AbstractBox} from
+         * a random source.
+         *
+         * @param cipher Cipher algorithm to use.
+         * @param mac The MAC algorithm to use.
+         * @param random The random source to use.
+         */
+        protected Secret(final Cipher cipher,
+                         final Mac mac,
+                         final SecureRandom random) {
+            this(cipher,
+                 AlgorithmSpecific.generateCipherKey(cipher, random),
+                 AlgorithmSpecific.generateCipherParams(cipher, random),
+                 mac, random);
+        }
+
+        /**
+         * Get a fully-initialized {@link javax.security.Cipher} instance
+         * using this {@code Secret}.
+         *
+         * @param mode The cipher mode to use.
+         * @return A fully-initialized {@link javax.security.Cipher}
+         *         instance using this {@code Secret}.
+         */
+        public final Cipher getCipher(final int mode)
+            throws NoSuchAlgorithmException, NoSuchPaddingException {
+            try {
+                final Cipher out = Cipher.getInstance(cipher);
+
+                out.init(Cipher.DECRYPT_MODE, cipherKey, cipherParams);
+
+                return out;
+            } catch(final InvalidAlgorithmParameterException |
+                          InvalidKeyException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+
+        /**
+         * {@inheritDoc}
+         */
+        @Override
+        public void destroy()
+            throws DestroyFailedException {
+            super.destroy();
+            cipherKey.destroy();
+        }
+
+        /**
+         * {@inheritDoc}
+         */
+        @Override
+        public boolean isDestroyed() {
+            return super.isDestroyed() && cipherKey.isDestroyed();
         }
     }
 
@@ -137,11 +385,6 @@ public abstract class AbstractBox<T, K extends AbstractBox.Keys> {
     private final byte[] data;
 
     /**
-     * The MAC code.
-     */
-    private final byte[] code;
-
-    /**
      * Initialize an {@code AbstractBox} from its components.
      *
      * @param data The encrypted data.
@@ -149,60 +392,47 @@ public abstract class AbstractBox<T, K extends AbstractBox.Keys> {
      */
     protected AbstractBox(final byte[] data,
                           final byte[] code) {
+        super(code);
         this.data = data;
-        this.code = code;
     }
 
     /**
-     * Perform authentication on the box contents.
-     *
-     * @param keys {@code Keys} to use.
-     * @return Whether authentication succeeds with the given keys.
+     * {@inheritDoc}
      */
-    private boolean authenticate(final K keys)
-        throws InvalidAlgorithmParameterException, InvalidKeyException,
-               NoSuchAlgorithmException, NoSuchPaddingException {
-        final Mac mac = Mac.getInstance(keys.mac);
-
-        mac.init(keys.macKey, keys.macParams);
-
-        final byte[] code = mac.doFinal(data);
-
-        return Arrays.equals(code, this.code);
+    @Override
+    protected void insertData(final Mac mac) {
+        mac.update(data);
     }
 
     /**
      * Decrypt the box contents.  No authentication in performed.
      *
-     * @param keys {@code Keys} to use.
+     * @param secret {@code Secret} to use.
      * @return The raw decrypted contents.
      */
-    private CipherInputStream decrypt(final K keys)
+    private CipherInputStream decrypt(final S secret)
         throws InvalidAlgorithmParameterException, InvalidKeyException,
                NoSuchAlgorithmException, NoSuchPaddingException {
-        final Cipher cipher = Cipher.getInstance(keys.cipher);
-
-        cipher.init(Cipher.DECRYPT_MODE, keys.cipherKey, keys.cipherParams);
-
-        return new CipherInputStream(new ByteArrayInputStream(data), cipher);
+        return new CipherInputStream(new ByteArrayInputStream(data),
+                                     secret.getCipher(Cipher.DECRYPT_MODE));
     }
 
     /**
-     * Obtain the raw decrypted contents.
+     * Obtain the decrypted contents.
      *
-     * @param keys {@code Keys} to use.
+     * @param secret {@code Secret} to use.
      * @return A stream containing the raw contents of the {@code Box}.
      * @throws IntegrityCheckException If MAC verification fails.
      */
-    public final CipherInputStream unlockRaw(final K keys)
+    public final CipherInputStream unlock(final S secret)
         throws IntegrityCheckException, InvalidAlgorithmParameterException,
                InvalidKeyException, NoSuchAlgorithmException,
                NoSuchPaddingException {
-        if (!authenticate(keys)) {
-            throw new IntegrityCheckException(keys.mac);
+        if (!verify(secret)) {
+            throw new IntegrityCheckException(secret.mac);
         }
 
-        return decrypt(keys);
+        return decrypt(secret);
     }
 
 }
